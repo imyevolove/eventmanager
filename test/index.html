@@ -1,0 +1,80 @@
+﻿<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+    <script type="text/javascript" src="../build/event-manager.js"></script>
+</head>
+<body>
+    <textarea readonly placeholder="console" id="console" style="width: 300px;height: 300px"></textarea>
+    <div>
+        <input type="text" placeholder="event name" id="register-event-name" />
+        <button id="register-event-commit">register event</button>
+    </div>
+    <events id="events">
+
+    </events>
+    <script type="text/javascript">
+        (function ()
+        {
+            var eventCoutner = 0;
+            var eventManager = new EventManager();
+            var consoleTextarea = GID('console');
+            var eventsContainer = GID('events');
+            var registerEventNameInput = GID('register-event-name')
+
+            GID('register-event-commit').addEventListener('click', function () { registerEvent(registerEventNameInput.value); });
+
+            function registerEvent(eventName)
+            {
+                var eventId = eventCoutner;
+                var subscription = eventManager.subscribe(eventName, function ()
+                {
+                    printToConsole("Event dispatched: " + eventName + " - " + eventId + "\n");
+                });
+                var eventElement = document.createElement("div");
+
+                var eventNameElement = document.createElement("input");
+                eventNameElement.setAttribute("readonly", "");
+                eventNameElement.value = eventName;
+                eventElement.appendChild(eventNameElement);
+
+                var removeButton = document.createElement("button");
+                removeButton.innerText = "remove";
+                removeButton.addEventListener('click', function ()
+                {
+                    if (!subscription.unsubscribe()) return;
+                    eventsContainer.removeChild(eventElement);
+                });
+                eventElement.appendChild(removeButton);
+
+                var dispatchButton = document.createElement("button");
+                dispatchButton.innerText = "dispatch";
+                dispatchButton.addEventListener('click', function ()
+                {
+                    printToConsole("-----------------------------" + "\n");
+                    eventManager.dispatch(eventName);
+                });
+                eventElement.appendChild(dispatchButton);
+
+                eventsContainer.appendChild(eventElement);
+                eventCoutner++;
+            }
+
+            registerEvent("test-a");
+            registerEvent("test-b");
+            registerEvent("test-c");
+            registerEvent("test-c");
+            registerEvent("test-c");
+
+            function printToConsole(text)
+            {
+                consoleTextarea.value += text;
+                consoleTextarea.scrollTop = consoleTextarea.scrollHeight
+            }
+            function GID(id) { return document.getElementById(id); }
+        })();
+    </script>
+</body>
+</html>
