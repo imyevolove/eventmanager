@@ -1,58 +1,85 @@
 const EVENT_LISTENER_SYMBOL_NAME = "token";
 
+let globalManager = undefined;
+
 /**
  * Предоставляет свойства и методы для работы с событиями в контексте менеджера событий.
  * @see EventManager
  * */
 export default class EventManager
 {
+    /** @type {EventManagerContext} */
     #_context = new EventManagerContext();
 
     constructor()
     {
     }
 
+    /**
+     * Подписывается на событие
+     * @param {String} eventName
+     * @param {Function} callback
+     * @returns {Subscription}
+     */
     subscribe(eventName, callback) 
     {
+        /** @type {EventManagerContext} */
+        let context = this.#_context;
+
         let token = Symbol(EVENT_LISTENER_SYMBOL_NAME);
         let subscription = new Subscription(this, token);
         let subscriptionDescriptor = new SubscriptionDescriptor(token, callback, eventName, subscription);
 
-        this.#_context.addDescriptor(subscriptionDescriptor);
-
-        return subscription;
+        return context.registerDescriptor(subscriptionDescriptor).subscription;
     }
 
     /**
      * Удаляет подписку из менеджера по токену.
-     * @param {any} token
+     * @param {Symbol} token
+     * @returns {Boolean}
      */
     unsubscribe(token)
     {
-        let descriptor = this.#_context.getDescriptor(token);
-        if (descriptor == null) return;
+        /** @type {EventManagerContext} */
+        let context = this.#_context;
 
-        this.#_context.removeDescriptor(descriptor);
-
-        // Удаление подписки
-        descriptor.destroy();
-
-        return true;
+        return context.unregisterDescriptorByToken(token);
     }
 
+    /**
+     * Вызывает событие по указанному имени с переданными данными.
+     * @param {any} eventName
+     * @param {any} eventData
+     */
     dispatch(eventName, eventData)
     {
-        if (!this.#_context.subscriptions.hasOwnProperty(eventName)) return false;
+        /** @type {EventManagerContext} */
+        let context = this.#_context;
 
-        let lieteners = this.#_context.subscriptions[eventName];
+        let collection = context.getEventCollection(eventName);
+        if (!collection) return false;
 
-        lieteners.forEach(descriptor => descriptor.callback(eventData));
+        collection.forEach(descriptor => descriptor.callback(eventData));
 
         return true;
     }
 
-    /** Возвращает новый экземпляр менеджера событий */
+    /** 
+     * Возвращает новый экземпляр менеджера событий
+     * @returns {EventManager}
+     */
     static create() { return new EventManager(); }
+
+    /**
+     * Возвращает глобальный экземпляр менеджера событий
+     * @returns {EventManager}
+     */
+    static get global()
+    {
+        return !globalManager
+            ? globalManager = new EventManager()
+            : globalManager;
+    }
 }
 
 export class Subscription
@@ -94,9 +121,16 @@ class SubscriptionDescriptor
 {
     constructor(token, callback, eventName, subscription)
     {
+        /** @type {Symbol} */
         this.token = token;
+
+        /** @type {Subscription} */
         this.subscription = subscription;
+
+        /** @type {Function} */
         this.callback = callback;
+
+        /** @type {String} */
         this.eventName = eventName;
     }
 
@@ -119,10 +153,50 @@ class EventManagerContext
     subscriptionDescriptors = [];
     subscriptions = {};
 
-    addDescriptor(descriptor)
+    /**
+     * Добавляет дескриптор в контекст со всеми привязками к событиям.
+     * @param {SubscriptionDescriptor} descriptor
+     * @returns {SubscriptionDescriptor}
+     */
+    registerDescriptor(descriptor)
     {
         this.subscriptionDescriptors.push(descriptor);
         this.getOrCreateEventCollection(descriptor.eventName).push(descriptor);
+
+        return descriptor;
+    }
+
+    /**
+     * Удаляет дескриптор из контекста с удалением всех связей с событиями.
+     * @param {SubscriptionDescriptor} descriptor
+     * @returns {Boolean}
+     */
+    unregisterDescriptor(descriptor)
+    {
+        this.#removeDescriptorFromCollection(this.subscriptionDescriptors, descriptor);
+        this.#removeDescriptorFromCollection(this.getOrCreateEventCollection(descriptor.eventName), descriptor);
+
+        this.removeEmptyEvent(descriptor.eventName);
+
+        return true;
+    }
+
+    /**
+     * Удаляет дескриптор из контекста по токену с удалением всех связей с событиями.
+     * @param {Symbol} token
+     * @returns {Boolean}
+     */
+    unregisterDescriptorByToken(token, destroyDescriptor = true)
+    {
+        let descriptor = this.getDescriptor(token);
+        let deleted = !descriptor ? false : this.unregisterDescriptor(descriptor);
+
+        if (deleted && destroyDescriptor)
+        {
+            descriptor.destroy();
+        }
+
+        return deleted;
     }
 
     getDescriptor(token)
@@ -137,12 +211,14 @@ class EventManagerContext
             : this.subscriptions[eventName] = [];
     }
 
-    removeDescriptor(descriptor)
+    /**
+     * Возвращает коллекцию дескрипторов по указанному имени события.
+     * @param {String} eventName
+     * @returns {Array<SubscriptionDescriptor>}
+     */
+    getEventCollection(eventName)
     {
-        this.#removeDescriptorFromCollection(this.subscriptionDescriptors, descriptor);
-        this.#removeDescriptorFromCollection(this.getOrCreateEventCollection(descriptor.eventName), descriptor);
-
-        this.removeEmptyEvent(descriptor.eventName);
+        return this.subscriptions.hasOwnProperty(eventName) ? this.subscriptions[eventName] : null;
     }
 
     hasEvent(eventName)
