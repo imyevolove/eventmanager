@@ -17,7 +17,9 @@ module.exports = {
             use: {
                 loader: "babel-loader?presets[]=es2015",
                 options: {
-                    presets: ['@babel/preset-env'],
+                    presets: [
+                        "@babel/preset-env"
+                    ],
                     plugins: [
                         "@babel/plugin-proposal-class-properties",
                         "@babel/plugin-proposal-private-methods"

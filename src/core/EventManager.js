@@ -1,17 +1,12 @@
 const EVENT_LISTENER_SYMBOL_NAME = "token";
 
 /**
- * Ïðåäîñòàâëÿåò ñâîéñòâà è ìåòîäû äëÿ ðàáîòû ñ ñîáûòèÿìè â êîíòåêñòå ìåíåäæåðà ñîáûòèé.
+ * ÐŸÑ€ÐµÐ´Ð¾ÑÑ‚Ð°Ð²Ð»ÑÐµÑ‚ ÑÐ²Ð¾Ð¹ÑÑ‚Ð²Ð° Ð¸ Ð¼ÐµÑ‚Ð¾Ð´Ñ‹ Ð´Ð»Ñ Ñ€Ð°Ð±Ð¾Ñ‚Ñ‹ Ñ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸ÑÐ¼Ð¸ Ð² ÐºÐ¾Ð½Ñ‚ÐµÐºÑÑ‚Ðµ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ€Ð° ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ð¹.
  * @see EventManager
  * */
 export default class EventManager
 {
-    #_subscriptions = {};
-    #_listeners = {};
-
-    get subscriptionsCount() { return Reflect.ownKeys(this.#_subscriptions).length; }
-    get eventNamesCount() { return Reflect.ownKeys(this.#_listeners).length; }
-    eventsCount(eventName) { return Reflect.has(this.#_listeners, eventName) ? this.#_listeners[eventName].length : 0; }
+    #_context = new EventManagerContext();
 
     constructor()
     {
@@ -21,70 +16,42 @@ export default class EventManager
     {
         let token = Symbol(EVENT_LISTENER_SYMBOL_NAME);
         let subscription = new Subscription(this, token);
+        let subscriptionDescriptor = new SubscriptionDescriptor(token, callback, eventName, subscription);
 
-        let subscriptionDescriptor = new SubscriptionDescriptor(callback, eventName, subscription);
-        this.#_subscriptions[token] = subscriptionDescriptor;
-
-        let listeners = Reflect.has(this.#_listeners, subscriptionDescriptor.eventName)
-            ? this.#_listeners[eventName]
-            : this.#_listeners[eventName] = [];
-        listeners.push(subscriptionDescriptor);
+        this.#_context.addDescriptor(subscriptionDescriptor);
 
         return subscription;
     }
 
     /**
-     * Óäàëÿåò ïîäïèñêó èç ìåíåäæåðà ïî òîêåíó.
+     * Ð£Ð´Ð°Ð»ÑÐµÑ‚ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÑƒ Ð¸Ð· Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ€Ð° Ð¿Ð¾ Ñ‚Ð¾ÐºÐµÐ½Ñƒ.
      * @param {any} token
      */
     unsubscribe(token)
     {
-        // Òîêåí íå íàéäåí
-        if (!Reflect.has(this.#_subscriptions, token)) return false;
+        let descriptor = this.#_context.getDescriptor(token);
+        if (descriptor == null) return;
 
-        // Ïîèñê äåñêðèïòîðà
-        let descriptor = this.#_subscriptions[token];
-        if (!descriptor) return false;
+        this.#_context.removeDescriptor(descriptor);
 
-        if (!this.#deleteDescriptorFromCollection(descriptor)) return false;
-
+        // Ð£Ð´Ð°Ð»ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸
         descriptor.destroy();
-
-        // Óäàëåíèå ïîäïèñêè
-        delete this.#_subscriptions[token];
 
         return true;
     }
 
     dispatch(eventName, eventData)
     {
-        if (!Reflect.has(this.#_listeners, eventName)) return false;
+        if (!this.#_context.subscriptions.hasOwnProperty(eventName)) return false;
 
-        let lieteners = this.#_listeners[eventName];
+        let lieteners = this.#_context.subscriptions[eventName];
 
         lieteners.forEach(descriptor => descriptor.callback(eventData));
 
         return true;
     }
 
-    #deleteDescriptorFromCollection(descriptor)
-    {
-        // Ïîèñê ïîäïèñ÷èêîâ ïî íàèìåíîâàíèþ ñîáûòèÿ
-        if (!Reflect.has(this.#_listeners, descriptor.eventName)) return false;
-
-        let listeners = this.#_listeners[descriptor.eventName];
-
-        // Ïîèñê è óäàëåíèå äåñêðèïòîðà èç ìàññèâà ñëóøàòåëåé ñîáûòèÿ
-        let descriptorIndex = listeners.indexOf(descriptor);
-        listeners.splice(descriptorIndex, 1);
-
-        // Óäàëåíèå ïóñòîãî ìàññèâà
-        if (listeners.length == 0) delete this.#_listeners[descriptor.eventName];
-
-        return true;
-    }
-
-    /** Âîçâðàùàåò íîâûé ýêçåìïëÿð ìåíåäæåðà ñîáûòèé */
+    /** Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ Ð½Ð¾Ð²Ñ‹Ð¹ ÑÐºÐ·ÐµÐ¼Ð¿Ð»ÑÑ€ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ€Ð° ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ð¹ */
     static create() { return new EventManager(); }
 }
 
@@ -104,13 +71,13 @@ export class Subscription
 
     unsubscribe()
     {
-        // Íåëüçÿ îòïèñàòü óæå îòïèñàâøåãîñÿ ñëóøàòåëÿ
+        // ÐÐµÐ»ÑŒÐ·Ñ Ð¾Ñ‚Ð¿Ð¸ÑÐ°Ñ‚ÑŒ ÑƒÐ¶Ðµ Ð¾Ñ‚Ð¿Ð¸ÑÐ°Ð²ÑˆÐµÐ³Ð¾ÑÑ ÑÐ»ÑƒÑˆÐ°Ñ‚ÐµÐ»Ñ
         if (this.#_disposed) return false;
 
-        // Çàïèñü ðåçóëüòàòà îòïèñêè
+        // Ð—Ð°Ð¿Ð¸ÑÑŒ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚Ð° Ð¾Ñ‚Ð¿Ð¸ÑÐºÐ¸
         this.#_disposed = this.#_manager.unsubscribe(this.#_token);
 
-        // Ôèíàëüíàÿ äåñòðóêòóðèçàöèÿ
+        // Ð¤Ð¸Ð½Ð°Ð»ÑŒÐ½Ð°Ñ Ð´ÐµÑÑ‚Ñ€ÑƒÐºÑ‚ÑƒÑ€Ð¸Ð·Ð°Ñ†Ð¸Ñ
         if (this.#_disposed) this.#dispose();
 
         return this.#_disposed;
@@ -125,17 +92,90 @@ export class Subscription
 
 class SubscriptionDescriptor
 {
-    constructor(callback, eventName, subscription)
+    constructor(token, callback, eventName, subscription)
     {
-        this.subscription   = subscription;
-        this.callback       = callback;
-        this.eventName      = eventName;
+        this.token = token;
+        this.subscription = subscription;
+        this.callback = callback;
+        this.eventName = eventName;
     }
 
     destroy()
     {
-        this.subscription   = null;
-        this.callback       = null;
-        this.eventName      = null;
+        this.token = null;
+        this.subscription = null;
+        this.callback = null;
+        this.eventName = null;
+    }
+}
+
+/** 
+ * ÐšÐ¾Ð½Ñ‚ÐµÐºÑÑ‚ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ€Ð° ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ð¹. 
+ * Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ÑÑ Ð´Ð»Ñ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ Ð´Ð°Ð½Ð½Ñ‹Ð¼Ð¸ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ€Ð°,
+ * Ð° Ñ‚Ð°ÐºÐ¶Ðµ Ð¿Ñ€ÐµÐ´Ð¾ÑÑ‚Ð°Ð²Ð»ÑÐµÑ‚ Ð´Ð¾ÑÑ‚ÑƒÐ¿ Ðº ÑÐ²Ð¾Ð¸Ð¼ Ð´Ð°Ð½Ð½Ñ‹Ð¼ Ðº Ð´Ñ€ÑƒÐ³Ð¸Ð¼ Ð¼Ð¾Ð´ÑƒÐ»ÑÐ¼ Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ€Ð°,
+ * Ð½Ð°Ð¿Ñ€Ð¸Ð¼ÐµÑ€, ÑÑ‚Ð°Ñ‚Ð¸ÑÑ‚Ð¸ÐºÐµ. */
+class EventManagerContext
+{
+    subscriptionDescriptors = [];
+    subscriptions = {};
+
+    addDescriptor(descriptor)
+    {
+        this.subscriptionDescriptors.push(descriptor);
+        this.getOrCreateEventCollection(descriptor.eventName).push(descriptor);
+    }
+
+    getDescriptor(token)
+    {
+        return this.subscriptionDescriptors.find(d => d.token == token);
+    }
+
+    getOrCreateEventCollection(eventName)
+    {
+        return this.subscriptions.hasOwnProperty(eventName)
+            ? this.subscriptions[eventName]
+            : this.subscriptions[eventName] = [];
+    }
+
+    removeDescriptor(descriptor)
+    {
+        this.#removeDescriptorFromCollection(this.subscriptionDescriptors, descriptor);
+        this.#removeDescriptorFromCollection(this.getOrCreateEventCollection(descriptor.eventName), descriptor);
+
+        this.removeEmptyEvent(descriptor.eventName);
+    }
+
+    hasEvent(eventName)
+    {
+        return this.subscriptions.hasOwnProperty(eventName);
+    }
+
+    removeEvent(eventName)
+    {
+        // ÐÐµÑ‚ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ
+        if (!this.hasEvent(eventName)) return;
+
+        // Ð£Ð´Ð°Ð»ÑÐµÐ¼ Ð±ÐµÐ· ÑÐ¾Ð¶Ð°Ð»ÐµÐ½Ð¸Ñ
+        delete this.subscriptions[eventName];
+    }
+
+    removeEmptyEvent(eventName)
+    {
+        // ÐÐµÑ‚ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ
+        if (!this.hasEvent(eventName)) return;
+
+        // Ð•ÑÑ‚ÑŒ Ð¶Ð¸Ð²Ñ‹Ðµ Ð¿Ð¾Ð´Ð¿Ð¸ÑÐºÐ¸
+        if (this.subscriptions[eventName].length != 0) return;
+
+        // Ð£Ð´Ð°Ð»ÑÐµÐ¼ Ð±ÐµÐ· ÑÐ¾Ð¶Ð°Ð»ÐµÐ½Ð¸Ñ
+        delete this.subscriptions[eventName];
+    }
+
+    #removeDescriptorFromCollection(collection, descriptor)
+    {
+        let descriptorIndex = collection.findIndex(d => d == descriptor);
+        if (descriptorIndex < 0) return false;
+
+        return collection.splice(descriptorIndex, 1) == 1;
     }
 }
