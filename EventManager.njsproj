@@ -38,6 +38,15 @@
     <Content Include="src\core\EventManager.js">
       <SubType>Code</SubType>
     </Content>
+    <Content Include="src\core\EventManagerContext.js">
+      <SubType>Code</SubType>
+    </Content>
+    <Content Include="src\core\Subscription.js">
+      <SubType>Code</SubType>
+    </Content>
+    <Content Include="src\core\SubscriptionDescriptor.js">
+      <SubType>Code</SubType>
+    </Content>
     <Content Include="src\index.js">
       <SubType>Code</SubType>
     </Content>
